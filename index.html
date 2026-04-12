@@ -17,11 +17,21 @@
         
         #calendar-card { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
         
-        /* Event Styling - Multi-line support */
-        .fc-event { cursor: pointer; padding: 2px 4px; font-size: 0.85em; }
-        .fc-event-title { font-weight: bold; white-space: normal !important; }
+        /* Event Box Styling */
+        .fc-event { 
+            cursor: pointer; 
+            padding: 4px !important; 
+            border: none !important;
+            background-color: var(--blue) !important;
+            margin-bottom: 2px !important;
+        }
 
-        /* Modal */
+        /* Custom Inner Event Styling */
+        .event-title-stack { font-size: 0.85em; color: white; line-height: 1.2; }
+        .event-name { font-weight: bold; display: block; text-transform: uppercase; font-size: 0.9em; }
+        .event-time { font-weight: normal; opacity: 0.9; font-size: 0.8em; }
+
+        /* Modal Styling */
         #booking-modal { 
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 90%; max-width: 380px; background: white; padding: 25px; z-index: 100;
@@ -30,10 +40,10 @@
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 90; backdrop-filter: blur(2px); }
         
         .form-group { margin-bottom: 15px; }
-        label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: bold; }
+        label { display: block; font-size: 11px; color: #666; margin-bottom: 5px; font-weight: bold; letter-spacing: 1px; }
         input, select, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; }
         
-        .save-btn { background: var(--green); color: white; border: none; width: 100%; padding: 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .save-btn { background: var(--green); color: white; border: none; width: 100%; padding: 15px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; }
         .close-btn { background: transparent; color: #888; margin-top: 10px; border: none; width: 100%; padding: 10px; cursor: pointer; text-decoration: underline; }
     </style>
 </head>
@@ -59,23 +69,23 @@
         
         <div class="form-group">
             <label>CLIENT NAME</label>
-            <input type="text" id="client-name" placeholder="Who is the cleaning for?">
+            <input type="text" id="client-name" placeholder="Name">
         </div>
 
         <div style="display: flex; gap: 10px;">
             <div class="form-group" style="flex: 1;">
-                <label>START TIME</label>
+                <label>START</label>
                 <select id="start-time"></select>
             </div>
             <div class="form-group" style="flex: 1;">
-                <label>END TIME</label>
+                <label>END</label>
                 <select id="end-time"></select>
             </div>
         </div>
 
         <div class="form-group">
             <label>NOTES & ADDRESS</label>
-            <textarea id="notes" rows="3" placeholder="Address, Gate Codes, etc."></textarea>
+            <textarea id="notes" rows="3" placeholder="Address..."></textarea>
         </div>
 
         <button class="save-btn" onclick="saveAppointment()">SAVE TO CALENDAR</button>
@@ -87,20 +97,18 @@
         let selectedDateStr;
         let appointments = JSON.parse(localStorage.getItem('cleaning_appts')) || [];
 
-        // Populate Time Dropdowns
         function populateTimes() {
             const startSelect = document.getElementById('start-time');
             const endSelect = document.getElementById('end-time');
             for(let i=7; i<=20; i++) {
                 let h = i > 12 ? i-12 : i;
                 let ampm = i >= 12 ? 'PM' : 'AM';
-                let timeStr = `${h}:00 ${ampm}`;
-                let val = i < 10 ? `0${i}:00` : `${i}:00`; // 24hr format for sorting
-                
-                startSelect.add(new Option(timeStr, val));
-                endSelect.add(new Option(timeStr, val));
+                let display = `${h}:00 ${ampm}`;
+                let value = i < 10 ? `0${i}:00` : `${i}:00`;
+                startSelect.add(new Option(display, value));
+                endSelect.add(new Option(display, value));
             }
-            endSelect.selectedIndex = 2; // Default 2 hours later
+            endSelect.selectedIndex = 2;
         }
         populateTimes();
 
@@ -111,15 +119,25 @@
                 headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
                 height: 'auto',
                 events: appointments,
-                displayEventTime: true,
-                eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
+                // THE FIX: This part forces the name above the time
+                eventContent: function(arg) {
+                    let timeText = arg.timeText; // e.g., "8:00 AM"
+                    let nameText = arg.event.title; // e.g., "John Smith"
+                    
+                    let arrayOfDomNodes = [
+                        Object.assign(document.createElement('div'), {
+                            className: 'event-title-stack',
+                            innerHTML: `<span class="event-name">${nameText}</span><span class="event-time">${timeText}</span>`
+                        })
+                    ];
+                    return { domNodes: arrayOfDomNodes };
+                },
                 dateClick: function(info) {
                     openModal(info.dateStr);
                 },
                 eventClick: function(info) {
-                    const client = info.event.title;
                     const notes = info.event.extendedProps.notes || "No notes";
-                    if(confirm(`CLIENT: ${client}\nNOTES: ${notes}\n\nDo you want to delete this?`)) {
+                    if(confirm(`CLIENT: ${info.event.title}\nNOTES: ${notes}\n\nDelete this?`)) {
                         info.event.remove();
                         appointments = appointments.filter(e => 
                             !(e.title === info.event.title && e.start === info.event.startStr)
@@ -133,7 +151,7 @@
 
         function openModal(date) {
             selectedDateStr = date;
-            document.getElementById('selected-date-display').innerText = "Book for " + date;
+            document.getElementById('selected-date-display').innerText = "Book: " + date;
             document.getElementById('booking-modal').style.display = 'block';
             document.getElementById('overlay').style.display = 'block';
         }
@@ -146,22 +164,17 @@
 
             if(!name) { alert("Please enter a client name"); return; }
 
-            // Create ISO strings so FullCalendar understands the exact time
-            const fullStart = `${selectedDateStr}T${startTime}:00`;
-            const fullEnd = `${selectedDateStr}T${endTime}:00`;
-
             const newEvent = {
                 title: name,
-                start: fullStart,
-                end: fullEnd,
+                start: `${selectedDateStr}T${startTime}:00`,
+                end: `${selectedDateStr}T${endTime}:00`,
                 extendedProps: { notes: notes },
-                allDay: false // This allows multiple events to show their time
+                allDay: false
             };
 
             appointments.push(newEvent);
             localStorage.setItem('cleaning_appts', JSON.stringify(appointments));
             calendar.addEvent(newEvent);
-            
             closeModal();
             document.getElementById('client-name').value = "";
             document.getElementById('notes').value = "";
